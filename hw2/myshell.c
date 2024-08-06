@@ -8,6 +8,12 @@
 #include <fcntl.h>
 #include <signal.h>
 
+// Function to handle SIGCHLD and reap zombie processes
+void sigchld_handler(int sig) {
+    // Use a loop to ensure that we reap all terminated child processes
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+}
+
 // Function to handle SIGINT in the shell
 void sigint_handler(int sig) {
     // Do nothing, just return to prevent the shell from exiting on SIGINT
@@ -16,11 +22,20 @@ void sigint_handler(int sig) {
 // Prepare function for initialization
 int prepare(void) {
     struct sigaction sa;
+
+    // Handle SIGCHLD to reap zombie processes
+    sa.sa_handler = sigchld_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror("sigaction");
+        return 1;
+    }
+
+    // Handle SIGINT to prevent the shell from exiting
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;  // Restart interrupted system calls
-
-    // Set SIGINT to be ignored by the shell but not by child processes
+    sa.sa_flags = SA_RESTART;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("sigaction");
         return 1;
