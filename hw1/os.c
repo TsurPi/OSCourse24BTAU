@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	printf("All BASIC tests pass\n");
 	pt = alloc_page_frame();
 	uint64_t new_pt = alloc_page_frame();
-	uint64_t *tmp;
+	/*uint64_t *tmp;*/
 	assert(page_table_query(pt, 0xcafe) == NO_MAPPING);
 	page_table_update(pt, 0xcafe, 0xf00d);
 	page_table_update(pt, 0xbaff, 0xbadd);
