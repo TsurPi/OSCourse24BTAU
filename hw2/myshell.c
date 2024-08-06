@@ -39,9 +39,10 @@ int process_arglist(int count, char **arglist) {
     int output_append_index = -1;
 
     // Check for background process
-    if (strcmp(arglist[count - 1], "&") == 0) {
+    if (count > 0 && strcmp(arglist[count - 1], "&") == 0) {
         bg_process = 1;
-        arglist[count - 1] = NULL;
+        arglist[count - 1] = NULL;  // Safely nullify the "&" to prevent passing it to execvp
+        count--; // Decrease count to avoid out-of-bounds access
     }
 
     // Check for special symbols in the arglist
