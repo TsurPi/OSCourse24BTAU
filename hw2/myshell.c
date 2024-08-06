@@ -36,6 +36,7 @@ int process_arglist(int count, char **arglist) {
     int bg_process = 0;
     int pipe_index = -1;
     int input_redirect_index = -1;
+    int output_redirect_index = -1;
     int output_append_index = -1;
 
     // Check for background process
@@ -51,6 +52,8 @@ int process_arglist(int count, char **arglist) {
             pipe_index = i;
         } else if (strcmp(arglist[i], "<") == 0) {
             input_redirect_index = i;
+        } else if (strcmp(arglist[i], ">") == 0) {
+            output_redirect_index = i;
         } else if (strcmp(arglist[i], ">>") == 0) {
             output_append_index = i;
         }
@@ -125,6 +128,32 @@ int process_arglist(int count, char **arglist) {
             close(fd);
 
             arglist[input_redirect_index] = NULL;
+            if (execvp(arglist[0], arglist) == -1) {
+                perror("execvp");
+                exit(1);
+            }
+        } else { // Parent process
+            waitpid(pid, &status, 0);
+        }
+
+    } else if (output_redirect_index != -1) {
+        // Handle output redirection
+        pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            return 0;
+        }
+
+        if (pid == 0) { // Child process
+            int fd = open(arglist[output_redirect_index + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd == -1) {
+                perror("open");
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+
+            arglist[output_redirect_index] = NULL;
             if (execvp(arglist[0], arglist) == -1) {
                 perror("execvp");
                 exit(1);
