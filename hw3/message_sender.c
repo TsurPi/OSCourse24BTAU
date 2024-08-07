@@ -1,37 +1,53 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <string.h>
+#include <stdio.h>
 #include <errno.h>
+#include <string.h>
+#include <limits.h>
+#include <fcntl.h>     
+#include <unistd.h>     
+#include <sys/ioctl.h>  
 #include "message_slot.h"
 
-int main(int argc, char** argv) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s <file> <channel> <message>\n", argv[0]);
-        exit(1);
-    }
-
-    int fd = open(argv[1], O_WRONLY);
-    if (fd < 0) {
-        perror("Failed to open file");
-        exit(1);
-    }
-
-    unsigned int channel_id = atoi(argv[2]);
-    if (ioctl(fd, MSG_SLOT_CHANNEL, channel_id) < 0) {
-        perror("ioctl failed");
-        close(fd);
-        exit(1);
-    }
-
-    if (write(fd, argv[3], strlen(argv[3])) < 0) {
-        perror("write failed");
-        close(fd);
-        exit(1);
-    }
-
+void clean(int fd) {
     close(fd);
-    return 0;
+}
+
+void exitAndClean(int fd) {
+    clean(fd);
+    exit(errno);
+}
+
+int main(int c, char **args) {
+    char *deviceFile, *msg;
+    long channelId;
+    int fd;
+
+    if (c != 4) {
+        perror("wrong amount of arguments given");
+        exit(1);
+    }
+
+    deviceFile = args[1];
+    channelId = strtol(args[2], NULL, 10);
+    if (channelId == UINT_MAX && errno == ERANGE) {
+        perror("wrong channelId given");
+        exit(1);
+    }
+    msg = args[3];
+
+    fd = open(deviceFile, O_RDWR);
+    if (fd < 0) {
+        perror("could not open file");
+        clean(fd);
+    }
+
+    if (ioctl(fd, MSG_SLOT_CHANNEL, (unsigned long) channelId) < 0) {
+        perror("ioctl failed");
+        exitAndClean(fd);
+    }
+    if (write(fd, msg, strlen(msg)) < 0) {
+        perror("write did not return correct amount of bytes");
+        exitAndClean(fd);
+    }
+    close(fd);
 }
