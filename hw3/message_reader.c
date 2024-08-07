@@ -1,39 +1,61 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
+#include <stdio.h>
 #include <errno.h>
+#include <string.h>
+#include <limits.h>
+#include <fcntl.h>      
+#include <unistd.h>     
+#include <sys/ioctl.h>  
 #include "message_slot.h"
 
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <file> <channel>\n", argv[0]);
-        exit(1);
-    }
-
-    int fd = open(argv[1], O_RDONLY);
-    if (fd < 0) {
-        perror("Failed to open file");
-        exit(1);
-    }
-
-    unsigned int channel_id = atoi(argv[2]);
-    if (ioctl(fd, MSG_SLOT_CHANNEL, channel_id) < 0) {
-        perror("ioctl failed");
-        close(fd);
-        exit(1);
-    }
-
-    char buffer[MAX_MESSAGE_LENGTH];
-    ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
-    if (bytes_read < 0) {
-        perror("read failed");
-        close(fd);
-        exit(1);
-    }
-
-    write(STDOUT_FILENO, buffer, bytes_read);
+void clean(int fd) {
     close(fd);
-    return 0;
+}
+
+void exitAndClean(int fd) {
+    clean(fd);
+    exit(errno);
+}
+
+int main(int c, char **args) {
+    char *deviceFile, *msg;
+    long channelId;
+    int fd, retVal;
+
+    if (c != 3) {
+        printf("wrong amount of arguments given: %s", strerror(1));
+        exit(1);
+    }
+
+    deviceFile = args[1];
+    channelId = strtol(args[2], NULL, 10);
+    if (channelId == UINT_MAX && errno == ERANGE) {
+        perror("wrong channelId given: %s");
+        exit(1);
+    }
+
+    fd = open(deviceFile, O_RDWR);
+    if (fd < 0) {
+        perror("could not open file: %s");
+        exit(1);
+    }
+
+    if ((msg = calloc(BUF_LEN, sizeof(char))) == NULL) {
+        errno = -1;
+        exit(1);
+    }
+
+    if (ioctl(fd, MSG_SLOT_CHANNEL, (unsigned long) channelId) < 0) {
+        perror("ioctl failed");
+        exitAndClean(fd);
+    }
+    if ((retVal = read(fd, msg, BUF_LEN)) < 0) {
+        perror("read failed");
+        exitAndClean(fd);
+    }
+    clean(fd);
+    if ((write(STDOUT_FILENO, msg, retVal) != retVal)) {
+        perror("failed writing to STDOUT");
+    }
+    free(msg);
 }
