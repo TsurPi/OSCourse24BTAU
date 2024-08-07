@@ -19,8 +19,40 @@ struct message_slot_t {
 
 static struct message_slot_t* slots[MAX_CHANNELS];
 
+// Function prototypes
+static int device_open(struct inode* inode, struct file* file);
+static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param);
+static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset);
+static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset);
+static int device_release(struct inode* inode, struct file* file);
+
+static struct file_operations fops = {
+    .owner = THIS_MODULE,
+    .open = device_open,
+    .unlocked_ioctl = device_ioctl,
+    .write = device_write,
+    .read = device_read,
+    .release = device_release,
+};
+
+// Helper function to find a channel by id
+static struct channel_t* find_channel(struct message_slot_t* slot, unsigned int id) {
+    struct channel_t* channel = slot->channels;
+    while (channel) {
+        if (channel->id == id) {
+            return channel;
+        }
+        channel = channel->next;
+    }
+    return NULL;
+}
+
 static int device_open(struct inode* inode, struct file* file) {
     int minor = iminor(inode);
+
+    if (minor >= MAX_CHANNELS) {
+        return -ENODEV;
+    }
 
     if (slots[minor] == NULL) {
         slots[minor] = kmalloc(sizeof(struct message_slot_t), GFP_KERNEL);
@@ -31,41 +63,37 @@ static int device_open(struct inode* inode, struct file* file) {
         slots[minor]->channels = NULL;
     }
 
-    file->private_data = (void*)minor;
+    file->private_data = slots[minor];
     return 0;
 }
 
 static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param) {
-    int minor = (int)(uintptr_t)file->private_data;
+    struct message_slot_t* slot;
     struct channel_t* channel;
-    struct channel_t* new_channel;
     unsigned int channel_id = (unsigned int)ioctl_param;
 
     if (ioctl_command_id != MSG_SLOT_CHANNEL || channel_id == 0) {
         return -EINVAL;
     }
 
-    channel = slots[minor]->channels;
-    while (channel) {
-        if (channel->id == channel_id) {
-            file->private_data = channel;
-            return 0;
+    slot = (struct message_slot_t*)file->private_data;
+    if (!slot) {
+        return -EINVAL;
+    }
+
+    channel = find_channel(slot, channel_id);
+    if (!channel) {
+        channel = kmalloc(sizeof(struct channel_t), GFP_KERNEL);
+        if (!channel) {
+            return -ENOMEM;
         }
-        channel = channel->next;
+        channel->id = channel_id;
+        channel->message_len = 0;
+        channel->next = slot->channels;
+        slot->channels = channel;
     }
 
-    new_channel = kmalloc(sizeof(struct channel_t), GFP_KERNEL);
-    if (!new_channel) {
-        printk(KERN_ERR "message_slot: Failed to allocate memory for channel.\n");
-        return -ENOMEM;
-    }
-
-    new_channel->id = channel_id;
-    new_channel->message_len = 0;
-    new_channel->next = slots[minor]->channels;
-    slots[minor]->channels = new_channel;
-    file->private_data = new_channel;
-
+    file->private_data = channel;
     return 0;
 }
 
@@ -78,6 +106,10 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
 
     if (length == 0 || length > MAX_MESSAGE_LENGTH) {
         return -EMSGSIZE;
+    }
+
+    if (buffer == NULL) {
+        return -EINVAL;
     }
 
     if (copy_from_user(channel->message, buffer, length)) {
@@ -103,6 +135,10 @@ static ssize_t device_read(struct file* file, char __user* buffer, size_t length
         return -ENOSPC;
     }
 
+    if (buffer == NULL) {
+        return -EINVAL;
+    }
+
     if (copy_to_user(buffer, channel->message, channel->message_len)) {
         return -EFAULT;
     }
@@ -111,18 +147,8 @@ static ssize_t device_read(struct file* file, char __user* buffer, size_t length
 }
 
 static int device_release(struct inode* inode, struct file* file) {
-    // Clean up resources if necessary
     return 0;
 }
-
-static struct file_operations fops = {
-    .owner = THIS_MODULE,
-    .open = device_open,
-    .unlocked_ioctl = device_ioctl,
-    .write = device_write,
-    .read = device_read,
-    .release = device_release,
-};
 
 static int __init message_slot_init(void) {
     int result = register_chrdev(MAJOR_NUM, "message_slot", &fops);
