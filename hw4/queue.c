@@ -82,11 +82,9 @@ void* dequeue(void) {
 
     // Wait until there is an item to dequeue
     while (queue.count == 0) {
-        printf("Thread %lx waiting for item...\n", thrd_current()); // Debugging
         queue.waitingCount++;
         cnd_wait(&queue.cond, &queue.mutex);
         queue.waitingCount--;
-        printf("Thread %lx woke up, checking queue...\n", thrd_current()); // Debugging
     }
 
     // Remove the item from the front of the queue
@@ -101,12 +99,11 @@ void* dequeue(void) {
     void* data = item->data;
     free(item);
 
-    printf("Thread %lx dequeued item %d\n", thrd_current(), *((int*)data)); // Debugging
-
     mtx_unlock(&queue.mutex);
 
     return data;
 }
+
 
 // Try to dequeue an item from the queue without blocking
 bool tryDequeue(void** item) {
