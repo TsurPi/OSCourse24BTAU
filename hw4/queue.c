@@ -9,15 +9,21 @@ typedef struct QueueItem {
     struct QueueItem* next;
 } QueueItem;
 
+// Structure for each thread waiting to dequeue
+typedef struct WaitingThread {
+    cnd_t cond;
+    struct WaitingThread* next;
+} WaitingThread;
+
 // Structure for the queue itself
 typedef struct {
     QueueItem* head;
     QueueItem* tail;
     size_t count;           // Current number of items in the queue
-    size_t waitingCount;    // Number of threads waiting for an item
     size_t visitedCount;    // Number of items that have passed through the queue
     mtx_t mutex;            // Mutex for synchronization
-    cnd_t cond;             // Condition variable for signaling
+    WaitingThread* waitingHead; // Head of the waiting thread queue
+    WaitingThread* waitingTail; // Tail of the waiting thread queue
 } Queue;
 
 Queue queue;
@@ -27,10 +33,10 @@ void initQueue(void) {
     queue.head = NULL;
     queue.tail = NULL;
     queue.count = 0;
-    queue.waitingCount = 0;
     queue.visitedCount = 0;
+    queue.waitingHead = NULL;
+    queue.waitingTail = NULL;
     mtx_init(&queue.mutex, mtx_plain);
-    cnd_init(&queue.cond);
 }
 
 // Destroy the queue and free resources
@@ -43,12 +49,17 @@ void destroyQueue(void) {
         queue.head = queue.head->next;
         free(temp);
     }
-    
-    mtx_unlock(&queue.mutex);
 
-    // Destroy the mutex and condition variable
+    // Free all waiting threads
+    while (queue.waitingHead != NULL) {
+        WaitingThread* temp = queue.waitingHead;
+        queue.waitingHead = queue.waitingHead->next;
+        cnd_destroy(&temp->cond);
+        free(temp);
+    }
+
+    mtx_unlock(&queue.mutex);
     mtx_destroy(&queue.mutex);
-    cnd_destroy(&queue.cond);
 }
 
 // Enqueue an item into the queue
@@ -59,7 +70,6 @@ void enqueue(void* item) {
 
     mtx_lock(&queue.mutex);
 
-    // Add the new item to the queue
     if (queue.tail == NULL) {
         queue.head = newItem;
     } else {
@@ -68,9 +78,14 @@ void enqueue(void* item) {
     queue.tail = newItem;
     queue.count++;
 
-    // Signal one waiting thread, if any
-    if (queue.waitingCount > 0) {
-        cnd_signal(&queue.cond);  // Using signal instead of broadcast
+    // Wake up the first waiting thread, if any
+    if (queue.waitingHead != NULL) {
+        WaitingThread* waitingThread = queue.waitingHead;
+        queue.waitingHead = queue.waitingHead->next;
+        if (queue.waitingHead == NULL) {
+            queue.waitingTail = NULL;
+        }
+        cnd_signal(&waitingThread->cond);
     }
 
     mtx_unlock(&queue.mutex);
@@ -80,11 +95,30 @@ void enqueue(void* item) {
 void* dequeue(void) {
     mtx_lock(&queue.mutex);
 
-    // Wait until there is an item to dequeue
+    // If the queue is empty, add the current thread to the waiting queue
     while (queue.count == 0) {
-        queue.waitingCount++;
-        cnd_wait(&queue.cond, &queue.mutex);
-        queue.waitingCount--;
+        WaitingThread myWaitingThread;
+        cnd_init(&myWaitingThread.cond);
+        myWaitingThread.next = NULL;
+
+        if (queue.waitingTail == NULL) {
+            queue.waitingHead = &myWaitingThread;
+        } else {
+            queue.waitingTail->next = &myWaitingThread;
+        }
+        queue.waitingTail = &myWaitingThread;
+
+        // Wait for a signal
+        cnd_wait(&myWaitingThread.cond, &queue.mutex);
+
+        // After being signaled, remove the thread from the queue
+        if (queue.waitingHead == &myWaitingThread) {
+            queue.waitingHead = myWaitingThread.next;
+        }
+        if (queue.waitingTail == &myWaitingThread) {
+            queue.waitingTail = NULL;
+        }
+        cnd_destroy(&myWaitingThread.cond);
     }
 
     // Remove the item from the front of the queue
@@ -103,7 +137,6 @@ void* dequeue(void) {
 
     return data;
 }
-
 
 // Try to dequeue an item from the queue without blocking
 bool tryDequeue(void** item) {
@@ -133,11 +166,6 @@ bool tryDequeue(void** item) {
 // Get the current number of items in the queue
 size_t size(void) {
     return queue.count;
-}
-
-// Get the current number of threads waiting for an item
-size_t waiting(void) {
-    return queue.waitingCount;
 }
 
 // Get the total number of items that have passed through the queue
