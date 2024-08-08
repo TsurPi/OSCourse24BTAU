@@ -132,14 +132,14 @@ void mixed_operations_test() {
     printf("Mixed operations test completed.\n\n");
 }
 
-void* limited_consumer_thread(void* arg) {
+int limited_consumer_thread(void* arg) {
     int max_items = *((int*)arg);
     for (int i = 0; i < max_items; i++) {
         int* item = (int*)dequeue();
         printf("Consumed: %d\n", *item);
         free(item);
     }
-    return NULL;
+    return 0; // Return 0 to indicate successful execution
 }
 
 void edge_case_test() {
@@ -167,8 +167,6 @@ void edge_case_test() {
     destroyQueue();
     printf("Edge case test completed.\n\n");
 }
-
-
 
 int main() {
     basic_test();
