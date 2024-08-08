@@ -5,10 +5,10 @@ gcc -o pcc_server -O3 -D_POSIX_C_SOURCE=200809 -Wall -std=c11 pcc_server.c
 gcc -o pcc_client -O3 -D_POSIX_C_SOURCE=200809 -Wall -std=c11 pcc_client.c
 
 Compile the tester:
-gcc -o tester tester.c
+gcc -o tester2 tester2.c
 
 Run the tester:
-./tester
+./tester2
 
 This tester covers basic functionality and some edge cases.
 However, it doesn't cover all possible scenarios or check the server's statistics output.
