@@ -132,14 +132,25 @@ void mixed_operations_test() {
     printf("Mixed operations test completed.\n\n");
 }
 
+void* limited_consumer_thread(void* arg) {
+    int max_items = *((int*)arg);
+    for (int i = 0; i < max_items; i++) {
+        int* item = (int*)dequeue();
+        printf("Consumed: %d\n", *item);
+        free(item);
+    }
+    return NULL;
+}
+
 void edge_case_test() {
     initQueue();
 
     printf("Starting edge case test...\n");
 
-    // Test dequeue from an empty queue
+    // Test dequeue from an empty queue with a single item and limited consumer
+    int max_items = 1; // Consume only one item
     thrd_t consumer;
-    thrd_create(&consumer, consumer_thread, NULL);
+    thrd_create(&consumer, limited_consumer_thread, &max_items);
 
     thrd_sleep(&(struct timespec){.tv_sec = 2, .tv_nsec = 0}, NULL); // Increased sleep time to 2 seconds
     int* item = malloc(sizeof(int));
@@ -156,6 +167,7 @@ void edge_case_test() {
     destroyQueue();
     printf("Edge case test completed.\n\n");
 }
+
 
 
 int main() {
