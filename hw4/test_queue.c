@@ -6,25 +6,25 @@
 #define NUM_THREADS 10
 #define NUM_ITEMS 1000
 
-void* producer_thread(void* arg) {
+int producer_thread(void* arg) {
     for (int i = 0; i < NUM_ITEMS; i++) {
         int* item = malloc(sizeof(int));
         *item = i;
         enqueue(item);
     }
-    return NULL;
+    return 0;
 }
 
-void* consumer_thread(void* arg) {
+int consumer_thread(void* arg) {
     for (int i = 0; i < NUM_ITEMS; i++) {
         int* item = (int*)dequeue();
         printf("Consumed: %d\n", *item);
         free(item);
     }
-    return NULL;
+    return 0;
 }
 
-void* try_consumer_thread(void* arg) {
+int try_consumer_thread(void* arg) {
     for (int i = 0; i < NUM_ITEMS; i++) {
         int* item = NULL;
         while (!tryDequeue((void**)&item)) {
@@ -33,10 +33,10 @@ void* try_consumer_thread(void* arg) {
         printf("Try Consumed: %d\n", *item);
         free(item);
     }
-    return NULL;
+    return 0;
 }
 
-void* mixed_thread(void* arg) {
+int mixed_thread(void* arg) {
     for (int i = 0; i < NUM_ITEMS / 2; i++) {
         int* item = malloc(sizeof(int));
         *item = i;
@@ -46,7 +46,7 @@ void* mixed_thread(void* arg) {
         printf("Mixed Dequeued: %d\n", *dequeuedItem);
         free(dequeuedItem);
     }
-    return NULL;
+    return 0;
 }
 
 void basic_test() {
