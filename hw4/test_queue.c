@@ -141,8 +141,10 @@ void edge_case_test() {
     thrd_t consumer;
     thrd_create(&consumer, consumer_thread, NULL);
 
-    thrd_sleep(&(struct timespec){.tv_sec = 1}, NULL); // Sleep to let consumer wait
-    enqueue((void*)malloc(sizeof(int)));
+    thrd_sleep(&(struct timespec){.tv_sec = 2, .tv_nsec = 0}, NULL); // Increased sleep time to 2 seconds
+    int* item = malloc(sizeof(int));
+    *item = 42; // Initialize the value to ensure it's valid
+    enqueue(item);
 
     thrd_join(consumer, NULL);
 
@@ -154,6 +156,7 @@ void edge_case_test() {
     destroyQueue();
     printf("Edge case test completed.\n\n");
 }
+
 
 int main() {
     basic_test();
