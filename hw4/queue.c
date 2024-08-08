@@ -24,6 +24,7 @@ typedef struct {
     mtx_t mutex;            // Mutex for synchronization
     WaitingThread* waitingHead; // Head of the waiting thread queue
     WaitingThread* waitingTail; // Tail of the waiting thread queue
+    size_t waitingCount;    // Number of threads waiting for an item
 } Queue;
 
 Queue queue;
@@ -36,6 +37,7 @@ void initQueue(void) {
     queue.visitedCount = 0;
     queue.waitingHead = NULL;
     queue.waitingTail = NULL;
+    queue.waitingCount = 0;
     mtx_init(&queue.mutex, mtx_plain);
 }
 
@@ -85,6 +87,7 @@ void enqueue(void* item) {
         if (queue.waitingHead == NULL) {
             queue.waitingTail = NULL;
         }
+        queue.waitingCount--;
         cnd_signal(&waitingThread->cond);
     }
 
@@ -107,6 +110,7 @@ void* dequeue(void) {
             queue.waitingTail->next = &myWaitingThread;
         }
         queue.waitingTail = &myWaitingThread;
+        queue.waitingCount++;
 
         // Wait for a signal
         cnd_wait(&myWaitingThread.cond, &queue.mutex);
@@ -171,4 +175,9 @@ size_t size(void) {
 // Get the total number of items that have passed through the queue
 size_t visited(void) {
     return queue.visitedCount;
+}
+
+// Get the current number of threads waiting for an item
+size_t waiting(void) {
+    return queue.waitingCount;
 }
