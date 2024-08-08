@@ -80,6 +80,9 @@ void enqueue(void* item) {
     queue.tail = newItem;
     queue.count++;
 
+    // Debugging output
+    printf("Enqueued item: %d, total items in queue: %zu\n", *((int*)item), queue.count);
+
     // Wake up the first waiting thread, if any
     if (queue.waitingHead != NULL) {
         WaitingThread* waitingThread = queue.waitingHead;
@@ -112,6 +115,9 @@ void* dequeue(void) {
         queue.waitingTail = &myWaitingThread;
         queue.waitingCount++;
 
+        // Debugging output
+        printf("Thread %lx waiting for item...\n", thrd_current());
+
         // Wait for a signal
         cnd_wait(&myWaitingThread.cond, &queue.mutex);
 
@@ -133,6 +139,9 @@ void* dequeue(void) {
     }
     queue.count--;
     queue.visitedCount++;
+
+    // Debugging output
+    printf("Thread %lx dequeued item %d\n", thrd_current(), *((int*)item->data));
 
     void* data = item->data;
     free(item);
@@ -162,6 +171,9 @@ bool tryDequeue(void** item) {
 
     *item = dequeuedItem->data;
     free(dequeuedItem);
+
+    // Debugging output
+    printf("TryDequeued item: %d, total items left in queue: %zu\n", *((int*)*item), queue.count);
 
     mtx_unlock(&queue.mutex);
     return true;
