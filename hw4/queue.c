@@ -68,9 +68,9 @@ void enqueue(void* item) {
     queue.tail = newItem;
     queue.count++;
 
-    // Signal all waiting threads
+    // Signal one waiting thread, if any
     if (queue.waitingCount > 0) {
-        cnd_broadcast(&queue.cond);  // Using broadcast instead of signal
+        cnd_signal(&queue.cond);  // Using signal instead of broadcast
     }
 
     mtx_unlock(&queue.mutex);
