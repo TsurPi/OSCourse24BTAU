@@ -1,6 +1,7 @@
 #include <threads.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 // Structure for each item in the queue
 typedef struct QueueItem {
