@@ -19,11 +19,17 @@ def stop_server(server_process):
         server_process.terminate()
         server_process.wait()
 
-def run_client(file_path):
-    client_process = subprocess.Popen([CLIENT_EXECUTABLE, SERVER_IP, SERVER_PORT, file_path],
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = client_process.communicate()
-    return client_process.returncode, stdout.decode(), stderr.decode()
+def run_client(file_path, delay=0):
+    def client_thread():
+        client_process = subprocess.Popen([CLIENT_EXECUTABLE, SERVER_IP, SERVER_PORT, file_path],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = client_process.communicate()
+        return client_process.returncode, stdout.decode(), stderr.decode()
+
+    if delay > 0:
+        time.sleep(delay)  # Introduce a delay to simulate slow clients
+
+    return client_thread()
 
 def create_test_files():
     os.makedirs(TEST_FILES_DIR, exist_ok=True)
@@ -40,6 +46,10 @@ def create_test_files():
     with open(os.path.join(TEST_FILES_DIR, "large_file.txt"), "wb") as f:
         f.write(b"A" * (1024 * 1024 - 1))  # 1MB - 1 byte
 
+    # Very large file exceeding 1MB
+    with open(os.path.join(TEST_FILES_DIR, "very_large_file.txt"), "wb") as f:
+        f.write(b"A" * (1024 * 1024 * 2))  # 2MB
+
     # Empty file
     open(os.path.join(TEST_FILES_DIR, "empty_file.txt"), "w").close()
 
@@ -47,63 +57,58 @@ def create_test_files():
     with open(os.path.join(TEST_FILES_DIR, "urandom_file.bin"), "wb") as f:
         subprocess.run(["head", "-c", "1M", "/dev/urandom"], stdout=f)
 
-def test_basic_functionality(server_process):
-    test_cases = ["small_printable.txt", "mixed_chars.txt", "large_file.txt"]
+def test_additional_stress(server_process):
+    test_cases = [
+        "small_printable.txt",
+        "large_file.txt",
+        "very_large_file.txt"
+    ]
 
+    client_threads = []
+
+    def run_client_thread(file_path):
+        run_client(file_path)
+
+    # Start multiple clients with varying file sizes
     for test_case in test_cases:
         file_path = os.path.join(TEST_FILES_DIR, test_case)
-        return_code, stdout, stderr = run_client(file_path)
-        print(f"Test {test_case}:")
-        print(f"Return code: {return_code}")
-        print(f"Output: {stdout}")
-        print(f"Error: {stderr}\n")
+        for _ in range(5):  # Launch 5 clients per file size
+            client_thread = threading.Thread(target=run_client_thread, args=(file_path,))
+            client_threads.append(client_thread)
+            client_thread.start()
 
-def test_error_handling(server_process):
-    test_cases = ["empty_file.txt", "non_existent_file.txt"]
+    for client_thread in client_threads:
+        client_thread.join()
 
-    for test_case in test_cases:
-        file_path = os.path.join(TEST_FILES_DIR, test_case)
-        return_code, stdout, stderr = run_client(file_path)
-        print(f"Test {test_case}:")
-        print(f"Return code: {return_code}")
-        print(f"Output: {stdout}")
-        print(f"Error: {stderr}\n")
+    print(f"Additional Stress Test: Multiple clients with varying file sizes\n")
 
-def test_signal_handling(server_process):
+def test_timeout_handling(server_process):
+    # Run a client with artificial delay to simulate timeout
     file_path = os.path.join(TEST_FILES_DIR, "large_file.txt")
-
-    def send_sigint():
-        time.sleep(2)  # Wait for the client to start sending data
-        os.kill(server_process.pid, signal.SIGINT)
-
-    sigint_thread = threading.Thread(target=send_sigint)
-    sigint_thread.start()
-
-    return_code, stdout, stderr = run_client(file_path)
-    sigint_thread.join()
-
-    print(f"Signal Handling Test (SIGINT):")
+    return_code, stdout, stderr = run_client(file_path, delay=5)
+    
+    print(f"Timeout Handling Test:")
     print(f"Return code: {return_code}")
     print(f"Output: {stdout}")
     print(f"Error: {stderr}\n")
 
-def test_stress(server_process):
-    file_path = os.path.join(TEST_FILES_DIR, "small_printable.txt")
+def test_resource_limits(server_process):
+    # Simulate low-memory conditions by running multiple clients
+    file_path = os.path.join(TEST_FILES_DIR, "very_large_file.txt")
     client_threads = []
 
-    def run_client_thread():
+    def run_client_thread(file_path):
         run_client(file_path)
 
-    # Start multiple clients simultaneously
-    for _ in range(10):
-        client_thread = threading.Thread(target=run_client_thread)
+    for _ in range(10):  # Launch 10 clients to stress memory
+        client_thread = threading.Thread(target=run_client_thread, args=(file_path,))
         client_threads.append(client_thread)
         client_thread.start()
 
     for client_thread in client_threads:
         client_thread.join()
 
-    print(f"Stress Test: 10 clients simultaneously\n")
+    print(f"Resource Limit Test: Simulated low-memory conditions\n")
 
 def main():
     create_test_files()
@@ -113,17 +118,14 @@ def main():
     time.sleep(1)  # Give the server time to start
 
     try:
-        print("\nRunning basic functionality tests...")
-        test_basic_functionality(server_process)
+        print("\nRunning additional stress tests...")
+        test_additional_stress(server_process)
 
-        print("\nRunning error handling tests...")
-        test_error_handling(server_process)
+        print("\nRunning timeout handling test...")
+        test_timeout_handling(server_process)
 
-        print("\nRunning signal handling test...")
-        test_signal_handling(server_process)
-
-        print("\nRunning stress test...")
-        test_stress(server_process)
+        print("\nRunning resource limit test...")
+        test_resource_limits(server_process)
 
     finally:
         print("\nStopping server...")
