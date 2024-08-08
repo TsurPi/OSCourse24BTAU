@@ -13,6 +13,7 @@ typedef struct QueueItem {
 typedef struct WaitingThread {
     cnd_t cond;
     struct WaitingThread* next;
+    bool isWaiting;
 } WaitingThread;
 
 // Structure for the queue itself
@@ -91,6 +92,7 @@ void enqueue(void* item) {
             queue.waitingTail = NULL;
         }
         queue.waitingCount--;
+        waitingThread->isWaiting = false; // Mark thread as ready to proceed
         cnd_signal(&waitingThread->cond);
     }
 
@@ -106,6 +108,7 @@ void* dequeue(void) {
         WaitingThread myWaitingThread;
         cnd_init(&myWaitingThread.cond);
         myWaitingThread.next = NULL;
+        myWaitingThread.isWaiting = true;
 
         if (queue.waitingTail == NULL) {
             queue.waitingHead = &myWaitingThread;
@@ -119,7 +122,9 @@ void* dequeue(void) {
         printf("Thread %lx waiting for item...\n", thrd_current());
 
         // Wait for a signal
-        cnd_wait(&myWaitingThread.cond, &queue.mutex);
+        while (myWaitingThread.isWaiting) {
+            cnd_wait(&myWaitingThread.cond, &queue.mutex);
+        }
 
         // After being signaled, remove the thread from the queue
         if (queue.waitingHead == &myWaitingThread) {
